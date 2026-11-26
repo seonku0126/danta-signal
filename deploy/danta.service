@@ -1,0 +1,11 @@
+[Unit]
+Description=Danta signal bot (one trading day)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/danta-bot
+ExecStart=/home/ubuntu/danta-bot/.venv/bin/python -m danta.bot
+TimeoutStartSec=9h
+Environment=TZ=Asia/Seoul

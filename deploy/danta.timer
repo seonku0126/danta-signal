@@ -1,0 +1,9 @@
+[Unit]
+Description=Run danta bot every weekday morning (KST)
+
+[Timer]
+OnCalendar=Mon..Fri 08:40 Asia/Seoul
+Persistent=false
+
+[Install]
+WantedBy=timers.target

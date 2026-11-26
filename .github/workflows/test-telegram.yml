@@ -1,0 +1,16 @@
+name: test-telegram
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - name: find chat id (channel list the bot was added to)
+        run: python -m danta.gh find-chat-id
+      - run: python -m danta.gh test-telegram
