@@ -32,7 +32,7 @@ class Config:
     kiwoom_mock: bool = field(default_factory=lambda: _env("KIWOOM_MOCK", "0") == "1")
 
     # ── 텔레그램 ──────────────────────────────────────
-    tg_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN"))
+    tg_token: str = field(default_factory=lambda: _env("TELEGRAM_BOT_TOKEN").replace("\n", "").replace(" ", ""))
     tg_chat_id: str = field(default_factory=lambda: _env("TELEGRAM_CHAT_ID"))
     channel_name: str = field(default_factory=lambda: _env("CHANNEL_NAME", "단타 시그널"))
 

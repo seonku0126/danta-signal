@@ -360,8 +360,20 @@ def main():
     elif cmd == "test-telegram":
         live.tg.send(f"✅ <b>{cfg.channel_name}</b> 봇 연결 테스트 (GitHub Actions)")
     elif cmd == "find-chat-id":
+        import requests
+        tok = cfg.tg_token
+        print(f"토큰 길이 {len(tok)}, 공백/줄바꿈 포함: {tok != tok.strip() or chr(10) in tok}")
+        me = requests.get(f"https://api.telegram.org/bot{tok.strip()}/getMe", timeout=10).json()
+        print("getMe:", me.get("ok"), (me.get("result") or {}).get("username"), me.get("description", ""))
+        up = requests.get(f"https://api.telegram.org/bot{tok.strip()}/getUpdates", timeout=10).json()
+        print("getUpdates:", up.get("ok"), "업데이트", len(up.get("result", [])), "건", up.get("description", ""))
+        for u in up.get("result", []):
+            for key in ("my_chat_member", "channel_post", "message"):
+                chat = (u.get(key) or {}).get("chat")
+                if chat:
+                    print(f"  {key}: {chat.get('type')} {chat.get('title', '')}")
         for cid, title in live.tg.find_chats():
-            print(f"{title}: {cid}")
+            print(f"채널 발견: {title}: {cid}")
     else:
         t0 = _time.time()
         cands = live.scan(set())
