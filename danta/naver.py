@@ -94,6 +94,7 @@ def norm_rank(s: dict) -> dict:
         "value": _f(s.get("accumulatedTradingValueRaw")),       # 원
         "mcap": _f(s.get("marketValueRaw")),                    # 원
         "trading": (s.get("tradeStopType") or {}).get("name") == "TRADING",
+        "mkt": "KQ" if str(s.get("sosok")) == "1" else "KS",
     }
 
 

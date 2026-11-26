@@ -248,3 +248,23 @@ def test_kiwoom_client_paging_and_headers():
     assert h2["cont-yn"] == "Y" and h2["next-key"] == "K1" and h2["authorization"] == "Bearer T"
     assert s.calls[1][0].endswith("/api/dostk/rkinfo")
     assert num("-8540", True) == 8540 and num("+3.25") == 3.25 and num("") == 0
+
+
+def test_strategy_always_picks_one():
+    from danta.strategy import Snap, choose
+    def S(code, flu, above=True, early=1e9, mcap=1e11, price=10000):
+        prev = price / (1 + flu / 100)
+        vw = price * (0.99 if above else 1.01)
+        return Snap(code, code, price, prev, price * (0.98 if above else 1.02), vw, early, early * 2, mcap, price, price)
+    # 정규: 조건 통과 중 초반 대금 1위 (상승률 20%는 제외)
+    best, tier = choose([S("a", 5, early=1e9), S("b", 8, early=3e9), S("c", 20, early=9e9)])
+    assert best.code == "b" and tier == "정규"
+    # VWAP 아래뿐이면 완화 단계로라도 반드시 1종목
+    best, tier = choose([S("a", 5, above=False), S("b", 3, above=False, early=5e9)])
+    assert best is not None and tier.startswith("완화")
+    # 전부 하락해도 대금 1위로 1종목
+    best, tier = choose([S("a", -3, early=1e9), S("b", -1, early=2e9)])
+    assert best is not None and tier.startswith("완화3")
+    # 시총 500억 미만·동전주 제외
+    best, _ = choose([S("tiny", 5, mcap=1e10, early=9e9), S("ok", 4, early=1e9)])
+    assert best.code == "ok"

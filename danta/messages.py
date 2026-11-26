@@ -28,7 +28,7 @@ def morning(now: datetime, s: Summary, cfg) -> str:
     rec = (f"누적 {s.n}전 {s.wins}승 {s.losses}패 · 승률 {s.win_rate:.0f}% · 손익비 {_pf(s)}"
            if s.n else "아직 기록 없음 (오늘이 첫 기록)")
     return (f"📅 <b>{now:%Y-%m-%d} ({WD[now.weekday()]})</b> {escape(cfg.channel_name)}\n{LINE}\n"
-            f"{cfg.open_time:%H:%M}~{cfg.scan_minutes}분간 조건 검색 → 통과 종목이 없으면 오늘은 쉽니다.\n"
+            f"09:05 초반 거래대금 1위 종목을 매일 1개 고릅니다.\n"
             f"{rec}\n\n<i>투자 참고용 자동 시그널이며 실제 체결 기록이 아닙니다.</i>")
 
 
@@ -50,6 +50,25 @@ def signal(c: Candidate, entry: int, stop: int, target: int, stop_pct: float, tm
             f"손절가 : {_won(stop)}원 (-{stop_pct:.1f}%)\n"
             f"목표가 : {_won(target)}원 (+{stop_pct * rr:.1f}%)\n{LINE}\n"
             f"<b>근거</b> (점수 {c.score:.2f})\n" + "\n".join(f"· {w}" for w in why) +
+            "\n\n손절가 이탈 시 즉시 종료, 15:20 남아 있으면 청산 기준으로 기록합니다.")
+
+
+def signal_v2(s, c: Candidate, entry: int, stop: int, target: int, stop_pct: float, tier: str, n: int,
+              tm: str, cfg, from_watch: bool = False) -> str:
+    rr = cfg.reward_risk
+    why = [f"09:01~09:04 거래대금 {s.value_early / 1e8:,.1f}억 · 후보 {n}개 중 1위",
+           f"오늘 누적 거래대금 {s.value_total / 1e8:,.0f}억",
+           f"VWAP {_won(s.vwap)}원 · 시가 {_won(s.open)}원"
+           + (" 위" if s.price >= s.vwap and s.price >= s.open else "")]
+    if from_watch:
+        why.insert(0, "🔔 장전 관심종목에 있던 종목")
+    note = "" if tier == "정규" else f"\n⚠️ 정규 조건 통과 종목이 없어 <b>{escape(tier)}</b> 기준으로 골랐습니다."
+    return (f"🎯 <b>오늘의 종목</b> {_hm(tm)}\n{LINE}\n"
+            f"<b>{escape(c.name)}</b> ({c.code})\n"
+            f"시그널 가격 : <b>{_won(entry)}원</b> ({_signed(c.flu_rt)}%)\n"
+            f"손절가 : {_won(stop)}원 (-{stop_pct:.1f}%)\n"
+            f"목표가 : {_won(target)}원 (+{stop_pct * rr:.1f}%)\n{LINE}\n"
+            "<b>근거</b>\n" + "\n".join(f"· {w}" for w in why) + note +
             "\n\n손절가 이탈 시 즉시 종료, 15:20 남아 있으면 청산 기준으로 기록합니다.")
 
 

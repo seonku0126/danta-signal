@@ -66,12 +66,13 @@ class Config:
     # ── 진입/청산 규칙 ────────────────────────────────
     stop_min_pct: float = 2.0
     stop_max_pct: float = 4.0
-    reward_risk: float = 2.0         # 목표 = 손절폭 × 2
+    reward_risk: float = 2.0         # 목표 = 손절폭 × 2 (백테스트에서 09:04·09:06 모두 전반·후반 플러스)
     cost_pct: float = 0.35           # 왕복 비용 가정: 거래세 0.20%(2026) + 수수료 약 0.03% + 슬리피지 약 0.12%
     notional: int = 10_000_000       # 성적 계산용 1회 매매 금액 (복리 X, 고정)
     milestones: tuple = (3.0, 5.0, 7.0, 10.0, 15.0)
 
     # ── GitHub Actions(네이버) 실시간 설정 ─────────────
+    pick_after_min: int = 5          # 개장 후 몇 분째에 고를지 (백테스트 최적: 4~6분)
     scan_poll_sec: float = 2.0       # 아침 스캔 간격(초) — 한 번 도는 데 2~4초 더 걸림
     confirm_polls: int = 3           # 같은 1등이 3번 연속이면 확정 (약 10~15초)
     track_poll_sec: float = 3.0      # 진입 후 현재가 확인 간격(초)

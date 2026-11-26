@@ -23,6 +23,7 @@ from .features import from_bars
 from .naver import Naver, is_common
 from .premarket import Watch, finalize
 from .scanner import evaluate, pick_best, plan
+from .strategy import choose, snap_from_minutes, to_candidate
 from .stats import Store, summarize, watch_summary
 from .telegram import Telegram
 from .tracker import Position, force_exit, update
@@ -71,6 +72,7 @@ class Live:
         self._daily: dict[str, tuple[float, float]] = {}   # code → (전일종가, 20일 평균 거래대금 백만원)
         self._hi52: dict[str, float] = {}
         self._mins: dict[str, list] = {}
+        self.yday_top: set[str] = set()
 
     # ── 공통 ──
     def market_open(self) -> bool:
@@ -103,8 +105,9 @@ class Live:
     # ── 0) 장전 관심종목: NXT 프리마켓(08:00~08:50) 가격 기준 ──
     def premarket(self) -> list[Watch]:
         cfg = self.cfg
-        uni = {r["code"]: r for r in self.nv.ranking("priceTop", pages=2) + self.nv.ranking("up", pages=1)
-               if is_common(r)}   # 장 시작 전 순위 = 전일 기준 (어제 주도주 + 거래대금 상위)
+        top = [r for r in self.nv.ranking("priceTop", pages=2) if is_common(r)]
+        self.yday_top = {r["code"] for r in top}   # 장 시작 전 순위 = 전일 거래대금 상위 (9시 후보군에 사용)
+        uni = {r["code"]: r for r in top + self.nv.ranking("up", pages=1) if is_common(r)}
         def one(code):
             b = self.nv.basic(code)
             om = b.get("overMarketPriceInfo") or {}
@@ -175,6 +178,28 @@ class Live:
         cands = [c for c in self.nv.pmap(detail, pre) if c]
         cands.sort(key=lambda c: c.score, reverse=True)
         return cands
+
+    # ── 1') 선정 v2: 09:05 초반 거래대금 1위 (strategy.py) ──
+    def pick_v2(self):
+        upto = now().strftime("%H%M")
+        val = [r for r in self.nv.ranking("priceTop", pages=2) if is_common(r)]
+        gain = [r for r in self.nv.ranking("up", pages=2) if is_common(r)]
+        rows = {r["code"]: r for r in gain + val if r["trading"]}
+        allowed = self.yday_top | {r["code"] for r in val}
+        pre = [r for r in rows.values() if r["code"] in allowed and 0 < r["flu"] <= 20
+               and r["price"] >= self.cfg.min_price and r["mcap"] >= self.cfg.min_mcap_eok * 1e8]
+        if not pre:
+            pre = sorted(rows.values(), key=lambda r: -r["value"])[:30]
+        pre = sorted(pre, key=lambda r: -r["value"])[:80]
+
+        def one(r):
+            bars = [b for b in self.nv.minutes(r["code"], self.day, "0900", upto) if b["t"] < upto]
+            prev = r["price"] / (1 + r["flu"] / 100) if r["flu"] > -100 else 0
+            return snap_from_minutes(r["code"], r["name"], bars, r["price"], prev, r["value"], r["mcap"])
+        snaps = [x for x in self.nv.pmap(one, pre) if x]
+        best, tier = choose(snaps, self.cfg.min_price, self.cfg.min_mcap_eok * 1e8)
+        rank = 1 + sorted(snaps, key=lambda x: -x.value_early).index(best) if best else 0
+        return best, tier, len(snaps), rank
 
     # ── 2) 실시간 추적 (현재가 3초 간격) ──
     def track(self, pos: Position, until: datetime) -> Position:
@@ -255,43 +280,32 @@ class Live:
                 return log.info("휴장일")
             _time.sleep(5)
         open_dt = now().replace(second=0, microsecond=0)
-        deadline = open_dt + timedelta(minutes=cfg.scan_minutes)
-
-        # 실시간 스캔: 몇 초 간격, 같은 1등이 confirm_polls번 연속이면 확정
-        streak_code, streak, chosen, last_all = None, 0, None, []
-        while now() <= deadline:
+        # 개장 5분째(09:05)에 판단: 09:01~09:04 완성봉 거래대금 기준. 늦어질수록 성과가 떨어지므로 바로 확정한다.
+        wait_until(open_dt + timedelta(minutes=cfg.pick_after_min, seconds=1))
+        best, tier, n = None, "", 0
+        for _ in range(6):                      # 데이터 오류 시 최대 약 30초 재시도
             try:
-                cands = self.scan({w.code for w in watches})
+                best, tier, n, rank = self.pick_v2()
+                if best:
+                    break
             except Exception as e:
-                log.warning("스캔 오류: %s", e)
-                cands = []
-            last_all = cands or last_all
-            best = pick_best(cands, cfg)
-            if best and best.code == streak_code:
-                streak += 1
-            else:
-                streak_code, streak = (best.code if best else None), (1 if best else 0)
-            log.info("%s 후보 %d 최고 %s (%d연속)", now().strftime("%H:%M:%S"), len(cands),
-                     f"{best.name} {best.score}" if best else "-", streak)
-            if best and streak >= cfg.confirm_polls:
-                chosen = best
-                break
-            _time.sleep(cfg.scan_poll_sec)
-
-        if not chosen:
-            self.store.set_day(self.day, "no_signal")
-            self.tg.send(M.no_signal([c for c in last_all if c.reject or c.score < cfg.min_score], cfg))
-            st.update(morning_done=True, done=True, today_line="시그널 없음 (쉼)")
+                log.warning("선정 오류: %s", e)
+            _time.sleep(5)
+        if not best:
+            self.store.set_day(self.day, "error", "선정 데이터 없음")
+            self.tg.send("⚠️ 시세 데이터를 받지 못해 오늘 종목을 고르지 못했습니다.")
+            st.update(morning_done=True, done=True, today_line="데이터 오류")
             save_state(st)
-            self.archive_minutes()
             return
-
+        chosen = to_candidate(best, rank)
         entry, stop, target, stop_pct = plan(chosen, cfg)
         ts = now().strftime("%Y%m%d%H%M%S")
         pos = Position(chosen.code, chosen.name, entry, stop, target, ts)
         self.store.mark_picked(self.day, chosen.code)
-        self.tg.send(M.signal(chosen, entry, stop, target, stop_pct, ts, cfg))
-        reasons = ", ".join(f"{k}={v:.2f}" for k, v in chosen.parts.items())
+        self.tg.send(M.signal_v2(best, chosen, entry, stop, target, stop_pct, tier, n, ts, cfg,
+                                 best.code in {w.code for w in watches}))
+        chosen.score = 1.0
+        reasons = f"tier={tier}, early_value={best.value_early/1e8:.1f}억"
         st.update(pos=pos.__dict__, score=chosen.score, reasons=reasons, morning_done=True)
         save_state(st)
 
