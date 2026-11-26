@@ -110,7 +110,7 @@ def _pf(s: Summary) -> str:
 def premarket(ws, cfg) -> str:
     if not ws:
         return (f"🔔 <b>장전 관심종목</b> {cfg.premarket_time:%H:%M}\n{LINE}\n"
-                "동시호가에서 조건에 맞는 종목이 없습니다. 9시 이후 장중 흐름으로 고릅니다.")
+                "프리마켓에서 조건에 맞는 종목이 없습니다. 09:05에 장중 흐름으로 고릅니다.")
     if ws[0].source == "nxt":
         lines = [f"{i}. <b>{escape(w.name)}</b> ({w.code})\n"
                  f"   NXT 프리마켓 {_won(w.exp_price)}원 ({_signed(w.flu_rt)}%) · 어제 거래대금 {w.yday_value:,.0f}억"
