@@ -1,0 +1,26 @@
+{
+ "day": "20261127",
+ "morning_started": "2026-11-27T08:40:24.248261",
+ "pos": {
+  "code": "108490",
+  "name": "로보티즈",
+  "entry": 301000,
+  "stop": 294500,
+  "target": 313500,
+  "entry_tm": "20261127090504",
+  "max_price": 304000.0,
+  "min_price": 294500.0,
+  "last_price": 294500.0,
+  "last_bar_tm": "",
+  "hit_milestones": [],
+  "exit_price": 294500.0,
+  "exit_reason": "손절",
+  "exit_tm": "20261127114008",
+  "vi_count": 0
+ },
+ "score": 1.0,
+ "reasons": "tier=정규, early_value=119.0억",
+ "morning_done": true,
+ "done": true,
+ "today_line": "로보티즈 손절 -2.51%"
+}
