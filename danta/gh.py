@@ -202,29 +202,27 @@ class Live:
         return best, tier, len(snaps), rank
 
     # ── 2) 실시간 추적 (현재가 3초 간격) ──
+    def _bars(self, code: str) -> list[dict]:
+        """네이버 1분봉을 tracker.update 형식으로 변환."""
+        return [{"cntr_tm": f"{self.day}{b['t']}00", "high_pric": b["h"], "low_pric": b["l"], "cur_prc": b["c"]}
+                for b in self.nv.minutes(code, self.day, "0900", "1530")]
+
     def track(self, pos: Position, until: datetime) -> Position:
+        """진입 후 추적: 1분에 한 번 1분봉을 받아 고가·저가로 손절/목표/마일스톤 판정 (요청 최소화)."""
         cfg = self.cfg
         marks = [m for m in cfg.milestones if m < pos.pct(pos.target) and m not in pos.hit_milestones]
         while now() < until and not pos.closed:
-            b = self.nv.basic(pos.code)
-            p = float(str(b.get("closePrice", "0")).replace(",", "") or 0)
-            if p:
-                ts = now().strftime("%Y%m%d%H%M%S")
-                pos.last_price = p
-                pos.max_price, pos.min_price = max(pos.max_price, p), min(pos.min_price, p)
-                if p <= pos.stop:
-                    pos.exit_price, pos.exit_reason, pos.exit_tm = p, "손절", ts
-                elif p >= pos.target:
-                    pos.exit_price, pos.exit_reason, pos.exit_tm = p, "목표가 도달", ts
-                else:
-                    for m in list(marks):
-                        if pos.pct(p) >= m:
-                            marks.remove(m)
-                            pos.hit_milestones.append(m)
-                            self.tg.send(M.milestone(pos, m, ts))
+            for kind, info in update(pos, self._bars(pos.code), marks):
+                if kind == "milestone":
+                    marks.remove(info["pct"])
+                    self.tg.send(M.milestone(pos, info["pct"], info["tm"]))
             self.state["pos"] = pos.__dict__
-            if not pos.closed:
-                _time.sleep(cfg.track_poll_sec)
+            if pos.closed:
+                break
+            # 다음 분이 시작되고 몇 초 뒤(직전 봉이 확정된 뒤)에 다시 확인
+            t = now()
+            nxt = t.replace(second=0, microsecond=0) + timedelta(minutes=1, seconds=cfg.track_bar_delay_sec)
+            _time.sleep(max(1.0, min((nxt - t).total_seconds(), (until - t).total_seconds())))
         return pos
 
     def finish(self, pos: Position, chosen_score: float, reasons: str):
@@ -335,12 +333,12 @@ class Live:
             pos = Position(**saved)
             pos.max_price, pos.min_price = saved["max_price"], saved["min_price"]
             # 오전 작업 종료~지금 사이 공백 구간은 1분봉으로 손절/목표 확인
-            bars = self.nv.minutes(pos.code, self.day, "0900", "1530")
-            update(pos, [{"cntr_tm": f"{self.day}{b['t']}00", "high_pric": b["h"], "low_pric": b["l"],
-                          "cur_prc": b["c"]} for b in bars])
+            update(pos, self._bars(pos.code))
             pos = self.track(pos, at(cfg.force_exit_time))
             if not pos.closed:
-                force_exit(pos, pos.last_price, now().strftime("%Y%m%d%H%M%S"))
+                b = self.nv.basic(pos.code)       # 청산가만 현재가 1회로 확인
+                p = float(str(b.get("closePrice", "0")).replace(",", "") or 0) or pos.last_price
+                force_exit(pos, p, now().strftime("%Y%m%d%H%M%S"))
             self.finish(pos, st.get("score", 0), st.get("reasons", ""))
         if not st.get("morning_started"):
             return log.info("오늘 아침 작업이 없었음 — 리포트 생략")

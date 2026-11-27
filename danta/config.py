@@ -75,7 +75,7 @@ class Config:
     pick_after_min: int = 5          # 개장 후 몇 분째에 고를지 (백테스트 최적: 4~6분)
     scan_poll_sec: float = 2.0       # 아침 스캔 간격(초) — 한 번 도는 데 2~4초 더 걸림
     confirm_polls: int = 3           # 같은 1등이 3번 연속이면 확정 (약 10~15초)
-    track_poll_sec: float = 3.0      # 진입 후 현재가 확인 간격(초)
+    track_bar_delay_sec: int = 5     # 진입 후 1분에 한 번, 매 분 시작 5초 뒤 1분봉 확인
     morning_cutoff: time = field(default_factory=lambda: _t(_env("MORNING_CUTOFF", "14:20")))
 
     # ── 폴링 주기 (초) ────────────────────────────────
